@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fabrisketch — AI PNG-to-PES Embroidery Studio</title>
+  <script src="https://unpkg.com/konva@9.3.6/konva.min.js"></script>
+  <style>
+    :root {
+      --bg: #121316;
+      --panel: #1b1d22;
+      --border: #2c2f38;
+      --text: #eceef2;
+      --muted: #9aa1b0;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    header {
+      height: 56px; background: var(--panel); border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; padding: 0 20px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.1rem; }
+    .badge { font-size: 0.72rem; background: #1e3a5f; color: #7dd3fc; padding: 3px 8px; border-radius: 99px; }
+    .metrics-pill {
+      font-size: 0.78rem; background: #1f242d; border: 1px solid var(--border);
+      color: #a7f3d0; padding: 4px 12px; border-radius: 99px; font-weight: 600;
+    }
+    .toolbar { display: flex; gap: 8px; align-items: center; }
+    .btn {
+      background: #272a33; color: var(--text); border: 1px solid var(--border);
+      padding: 7px 14px; border-radius: 7px; cursor: pointer; font-size: 0.85rem; font-weight: 500;
+    }
+    .btn:hover { background: #323642; }
+    .btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary { background: var(--success); border-color: var(--success); color: #052e16; font-weight: 700; }
+    .btn-primary:hover { filter: brightness(1.08); }
+
+    main { flex: 1; display: flex; overflow: hidden; }
+    aside {
+      width: 340px; background: var(--panel); border-right: 1px solid var(--border);
+      padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px;
+    }
+    .section-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+    }
+    .section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .undo-btn {
+      font-size: 0.72rem; background: #262934; color: #93c5fd; border: 1px solid #3b4254;
+      padding: 2px 8px; border-radius: 5px; cursor: pointer; display: none;
+    }
+    .undo-btn:hover { background: #323846; }
+
+    .control-group { background: #15171b; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    label { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 6px; }
+    select, input[type="range"] { width: 100%; margin-bottom: 10px; }
+    select { background: #22252d; color: var(--text); border: 1px solid var(--border); padding: 6px 8px; border-radius: 6px; }
+
+    .upload-box {
+      border: 2px dashed #3f4554; border-radius: 10px; padding: 18px 12px; text-align: center;
+      cursor: pointer; transition: border-color 0.2s; background: #14161a;
+    }
+    .upload-box:hover { border-color: var(--accent); }
+    .upload-box p { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+
+    .spool-list { display: flex; flex-direction: column; gap: 8px; }
+    .spool-card {
+      display: flex; align-items: center; gap: 10px; background: #1c1f26;
+      border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .spool-card:hover { border-color: #4b5263; background: #222630; }
+    .spool-color {
+      width: 28px; height: 28px; border-radius: 6px; border: 1px solid #555;
+      cursor: pointer; padding: 0; background: none; flex-shrink: 0;
+    }
+    .spool-info { flex: 1; font-size: 0.8rem; min-width: 0; }
+    .spool-info strong {
+      display: block; font-size: 0.84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .spool-meta { color: var(--muted); font-size: 0.74rem; }
+    .spool-actions { display: flex; align-items: center; gap: 4px; }
+    .icon-btn {
+      background: #262a34; color: var(--muted); border: 1px solid var(--border);
+      border-radius: 6px; padding: 5px 7px; font-size: 0.75rem; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .icon-btn:hover { color: var(--text); background: #323744; }
+    .icon-btn.delete-btn:hover { background: rgba(239, 68, 68, 0.18); color: #fca5a5; border-color: var(--danger); }
+
+    .canvas-area {
+      flex: 1; position: relative; display: flex; align-items: center; justify-content: center;
+      background-image: radial-gradient(#262932 1px, transparent 1px); background-size: 20px 20px;
+      overflow: auto; padding: 20px;
+    }
+    #stage-container { background: #ffffff; border-radius: 8px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+    .status-bar {
+      position: fixed; bottom: 14px; left: calc(50% + 170px); transform: translateX(-50%);
+      background: rgba(20, 22, 27, 0.92); border: 1px solid var(--border);
+      padding: 6px 14px; border-radius: 99px; font-size: 0.8rem; color: var(--muted); z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span>🧵 Fabrisketch</span>
+      <span class="badge" id="ai-badge">Zero-Credit Local AI</span>
+      <span class="metrics-pill" id="total-metrics">0 stitches • ~0 min sew time</span>
+    </div>
+    <div class="toolbar">
+      <button class="btn active" id="mode-stitches" onclick="setMode('stitches')">View Stitches</button>
+      <button class="btn" id="mode-corners" onclick="setMode('corners')">Edit Corners</button>
+      <button class="btn" id="mode-draw" onclick="setMode('draw')">Draw Thread</button>
+      <button class="btn" onclick="toggleRefImage()">Toggle PNG</button>
+      <button class="btn btn-primary" onclick="downloadPES()">⬇ Download .PES</button>
+    </div>
+  </header>
+
+  <main>
+    <aside>
+      <div class="upload-box" onclick="document.getElementById('png-input').click()">
+        <strong>Upload Your PNG Here</strong>
+        <p>Click to select logo or complex icon (.png)</p>
+        <input type="file" id="png-input" accept="image/png,image/jpeg" hidden onchange="handleUpload(event)" />
+      </div>
+
+      <div class="control-group">
+        <div class="section-title" style="margin-bottom:8px;">Embroidery Settings</div>
+        <label>Hoop / Target Width <span id="width-val">100 mm</span></label>
+        <select id="hoop-size" onchange="reanalyze()">
+          <option value="80">80 × 80 mm (Chest / Pocket Logo)</option>
+          <option value="100" selected>100 × 100 mm (4×4 Standard Hoop)</option>
+          <option value="130">130 × 180 mm (5×7 Hoop)</option>
+          <option value="200">200 × 300 mm (8×12 Jacket Back)</option>
+        </select>
+
+        <label>Stitch Density & Count</label>
+        <select id="quality-select" onchange="reanalyze()">
+          <option value="low">Low Count (~4k–6k Stitches • Light Tee)</option>
+          <option value="medium" selected>Medium (~7k–10k Stitches • Standard 40wt)</option>
+          <option value="high">High (~10k–14k Stitches • Hoodie / Twill)</option>
+          <option value="ultrafine">Ultra-Fine (~15k+ Stitches • Heavy Patch)</option>
+        </select>
+
+        <label>Thread Colors <span id="threads-val">6</span></label>
+        <input type="range" id="thread-count" min="1" max="15" value="6"
+               oninput="document.getElementById('threads-val').innerText=this.value" onchange="reanalyze()" />
+
+        <label>Color Mode</label>
+        <select id="color-mode" onchange="reanalyze()">
+          <option value="true" selected>Automatic (Brother Palette)</option>
+          <option value="false">Manual / Exact PNG Colors</option>
+        </select>
+      </div>
+
+      <div>
+        <div class="section-header">
+          <span class="section-title">Thread Colors Used</span>
+          <button class="undo-btn" id="undo-btn" onclick="undoLastDelete()">↩ Undo Delete</button>
+        </div>
+        <div class="spool-list" id="spool-list">
+          <p style="font-size:0.8rem; color:var(--muted);">Upload a PNG to inspect & remove thread colors.</p>
+        </div>
+      </div>
+    </aside>
+
+    <section class="canvas-area">
+      <div id="stage-container"></div>
+      <div class="status-bar" id="status-bar">Ready — upload a PNG to begin digitizing</div>
+    </section>
+  </main>
+
+  <script>
+    let currentFile = null;
+    let projectData = null;
+    let deletedHistory = [];
+    let hiddenColors = new Set();
+    let currentMode = 'stitches';
+    let showRef = true;
+    let bgImageObj = null;
+
+    const stage = new Konva.Stage({ container: 'stage-container', width: 560, height: 560 });
+    const bgLayer = new Konva.Layer();
+    const stitchLayer = new Konva.Layer();
+    const editLayer = new Konva.Layer();
+    stage.add(bgLayer, stitchLayer, editLayer);
+
+    let isDrawing = false;
+    let activeDrawLine = null;
+    let activeDrawPts = [];
+
+    stage.on('mousedown touchstart', () => {
+      if (currentMode !== 'draw' || !projectData) return;
+      isDrawing = true;
+      const pos = stage.getPointerPosition();
+      activeDrawPts = [pos.x, pos.y];
+      const drawColor = projectData.layers.length > 0 ? projectData.layers[0].hex : '#e11d48';
+      activeDrawLine = new Konva.Line({
+        stroke: drawColor, strokeWidth: 2.2, points: activeDrawPts, lineCap: 'round', lineJoin: 'round'
+      });
+      editLayer.add(activeDrawLine);
+    });
+
+    stage.on('mousemove touchmove', () => {
+      if (!isDrawing || currentMode !== 'draw') return;
+      const pos = stage.getPointerPosition();
+      activeDrawPts = activeDrawPts.concat([pos.x, pos.y]);
+      activeDrawLine.points(activeDrawPts);
+    });
+
+    stage.on('mouseup touchend', () => {
+      if (!isDrawing || currentMode !== 'draw') return;
+      isDrawing = false;
+      const mmPerPx = projectData.mm_per_px;
+      const chainMm = [];
+      let lastX = null, lastY = null;
+      for (let i = 0; i < activeDrawPts.length; i += 2) {
+        const xmm = activeDrawPts[i] * mmPerPx;
+        const ymm = activeDrawPts[i + 1] * mmPerPx;
+        if (lastX === null || Math.hypot(xmm - lastX, ymm - lastY) >= 2.2) {
+          chainMm.push([Number(xmm.toFixed(2)), Number(ymm.toFixed(2))]);
+          lastX = xmm; lastY = ymm;
+        }
+      }
+      if (chainMm.length >= 2) {
+        projectData.layers.push({
+          id: Date.now(),
+          rgb: [225, 29, 72],
+          hex: '#e11d48',
+          brother_code: 'DRAW',
+          brother_name: 'Freehand Thread',
+          corners_px: [],
+          holes_px: [],
+          angle_deg: 0,
+          stitch_type: 'run',
+          chains_mm: [chainMm],
+          stitch_count: chainMm.length,
+          thread_meters: Number(((chainMm.length * 2.2 * 3.2) / 1000).toFixed(2)),
+          is_custom_drawn: true
+        });
+        renderStudio();
+        setStatus('Added custom freehand thread path!');
+      }
+    });
+
+    function setMode(mode) {
+      currentMode = mode;
+      ['stitches', 'corners', 'draw'].forEach(m => {
+        document.getElementById('mode-' + m).classList.toggle('active', m === mode);
+      });
+      renderStudio();
+      if (mode === 'corners') setStatus('Drag any red corner dot to reshape a region');
+      else if (mode === 'draw') setStatus('Click and drag anywhere on the canvas to draw custom threads');
+      else setStatus('Viewing simulated embroidery stitches');
+    }
+
+    function toggleRefImage() {
+      showRef = !showRef;
+      bgLayer.visible(showRef);
+    }
+
+    function setStatus(msg) {
+      document.getElementById('status-bar').innerText = msg;
+    }
+
+    function handleUpload(e) {
+      if (!e.target.files.length) return;
+      currentFile = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = ev => {
+        bgImageObj = new Image();
+        bgImageObj.onload = () => reanalyze();
+        bgImageObj.src = ev.target.result;
+      };
+      reader.readAsDataURL(currentFile);
+    }
+
+    async function reanalyze() {
+      if (!currentFile) return;
+      setStatus('Optimizing stitch paths & sub-pixel boundaries...');
+      deletedHistory = [];
+      hiddenColors.clear();
+      updateUndoButton();
+
+      const widthMm = document.getElementById('hoop-size').value;
+      document.getElementById('width-val').innerText = widthMm + ' mm';
+
+      const form = new FormData();
+      form.append('file', currentFile);
+      form.append('num_threads', document.getElementById('thread-count').value);
+      form.append('target_width_mm', widthMm);
+      form.append('quality', document.getElementById('quality-select').value);
+      form.append('auto_brother_colors', document.getElementById('color-mode').value);
+
+      const res = await fetch('/api/analyze', { method: 'POST', body: form });
+      projectData = await res.json();
+
+      document.getElementById('ai-badge').innerText = projectData.ai_active
+        ? 'U-Net AI + v5 Stitch Optimizer' : 'v5 Stitch Optimizer';
+
+      stage.width(projectData.width_px);
+      stage.height(projectData.height_px);
+      renderStudio();
+      setStatus(`Ready: ${projectData.layers.length} stitched regions across ${getGroupedColors().length} thread colors.`);
+    }
+
+    function getGroupedColors() {
+      if (!projectData || !projectData.layers) return [];
+      const groups = new Map();
+      projectData.layers.forEach(layer => {
+        const key = layer.hex.toLowerCase();
+        if (!groups.has(key)) {
+          groups.set(key, {
+            hex: key,
+            brother_name: layer.brother_name,
+            brother_code: layer.brother_code,
+            region_count: 0,
+            stitch_count: 0,
+            thread_meters: 0
+          });
+        }
+        const g = groups.get(key);
+        g.region_count += 1;
+        g.stitch_count += layer.stitch_count;
+        g.thread_meters = Number((g.thread_meters + layer.thread_meters).toFixed(2));
+      });
+      return Array.from(groups.values());
+    }
+
+    function deleteColorGroup(targetHex) {
+      if (!projectData) return;
+      const key = targetHex.toLowerCase();
+      const removed = projectData.layers.filter(l => l.hex.toLowerCase() === key);
+      if (!removed.length) return;
+
+      deletedHistory.push(JSON.parse(JSON.stringify(projectData.layers)));
+      updateUndoButton();
+
+      projectData.layers = projectData.layers.filter(l => l.hex.toLowerCase() !== key);
+      hiddenColors.delete(key);
+      renderStudio();
+      setStatus(`Deleted all ${removed[0].brother_name} (${removed.length} region${removed.length > 1 ? 's' : ''}) from design!`);
+    }
+
+    function toggleColorVisibility(targetHex) {
+      const key = targetHex.toLowerCase();
+      if (hiddenColors.has(key)) hiddenColors.delete(key);
+      else hiddenColors.add(key);
+      renderStudio();
+    }
+
+    function undoLastDelete() {
+      if (!deletedHistory.length || !projectData) return;
+      projectData.layers = deletedHistory.pop();
+      updateUndoButton();
+      renderStudio();
+      setStatus('Restored deleted thread color!');
+    }
+
+    function updateUndoButton() {
+      const btn = document.getElementById('undo-btn');
+      btn.style.display = deletedHistory.length > 0 ? 'inline-block' : 'none';
+    }
+
+    function renderStudio() {
+      if (!projectData) return;
+      bgLayer.destroyChildren();
+      stitchLayer.destroyChildren();
+      editLayer.destroyChildren();
+
+      if (bgImageObj) {
+        bgLayer.add(new Konva.Image({
+          image: bgImageObj, width: projectData.width_px, height: projectData.height_px, opacity: 0.22
+        }));
+      }
+
+      const mmPerPx = projectData.mm_per_px;
+      const threadWidthPx = Math.max(1.2, Math.min(2.4, 0.35 / mmPerPx));
+      let activeTotalStitches = 0;
+
+      projectData.layers.forEach(layer => {
+        if (hiddenColors.has(layer.hex.toLowerCase())) return;
+        activeTotalStitches += layer.stitch_count;
+
+        layer.chains_mm.forEach(chain => {
+          const flatPts = [];
+          chain.forEach(([xmm, ymm]) => flatPts.push(xmm / mmPerPx, ymm / mmPerPx));
+          stitchLayer.add(new Konva.Line({
+            points: flatPts,
+            stroke: layer.hex,
+            strokeWidth: threadWidthPx,
+            lineCap: 'round',
+            lineJoin: 'round',
+            shadowColor: 'rgba(0,0,0,0.22)',
+            shadowBlur: 1
+          }));
+        });
+
+        if (currentMode === 'corners' && layer.corners_px.length >= 3) {
+          const polyPts = layer.corners_px.flat();
+          editLayer.add(new Konva.Line({
+            points: polyPts, closed: true, stroke: '#10b981', strokeWidth: 1.3, dash: [4, 4]
+          }));
+          layer.corners_px.forEach((pt, pIdx) => {
+            const dot = new Konva.Circle({
+              x: pt[0], y: pt[1], radius: 3.8, fill: '#ef4444', stroke: '#fff', strokeWidth: 1, draggable: true
+            });
+            dot.on('dragend', async () => {
+              layer.corners_px[pIdx] = [dot.x(), dot.y()];
+              const quality = document.getElementById('quality-select').value;
+              const url = `/api/recalculate-layer?angle_deg=${layer.angle_deg}&mm_per_px=${mmPerPx}&quality=${quality}&stitch_type=${layer.stitch_type}`;
+              const r = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ corners_px: layer.corners_px, holes_px: layer.holes_px || [] })
+              });
+              const updated = await r.json();
+              layer.chains_mm = updated.chains_mm;
+              layer.stitch_count = updated.stitch_count;
+              layer.thread_meters = updated.thread_meters;
+              renderStudio();
+            });
+            editLayer.add(dot);
+          });
+        }
+      });
+
+      // Update live Total Stitches & Estimated Machine Sew Time (at ~650 stitches/min)
+      const estMins = Math.max(1, Math.round(activeTotalStitches / 650));
+      document.getElementById('total-metrics').innerText =
+        `${activeTotalStitches.toLocaleString()} stitches • ~${estMins} min sew time`;
+
+      const spoolList = document.getElementById('spool-list');
+      spoolList.innerHTML = '';
+      const groups = getGroupedColors();
+
+      if (!groups.length) {
+        spoolList.innerHTML = '<p style="font-size:0.8rem; color:var(--muted);">All thread colors removed. Click Undo Delete or re-upload.</p>';
+        return;
+      }
+
+      groups.forEach(group => {
+        const isHidden = hiddenColors.has(group.hex);
+        const card = document.createElement('div');
+        card.className = 'spool-card';
+        if (isHidden) card.style.opacity = '0.45';
+
+        card.innerHTML = `
+          <input type="color" class="spool-color" value="${group.hex}"
+                 title="Change all ${group.brother_name} threads"
+                 onchange="updateColorGroup('${group.hex}', this.value)" />
+          <div class="spool-info">
+            <strong>${group.brother_name} (${group.brother_code})</strong>
+            <span class="spool-meta">${group.region_count} region${group.region_count > 1 ? 's' : ''} • ${group.stitch_count.toLocaleString()} stitches • ~${group.thread_meters}m</span>
+          </div>
+          <div class="spool-actions">
+            <button class="icon-btn" title="${isHidden ? 'Show Color' : 'Hide Color'}"
+                    onclick="toggleColorVisibility('${group.hex}')">${isHidden ? '🙈' : '👁️'}</button>
+            <button class="icon-btn delete-btn" title="Delete ALL ${group.brother_name} threads"
+                    onclick="deleteColorGroup('${group.hex}')">🗑️ Delete</button>
+          </div>
+        `;
+        spoolList.appendChild(card);
+      });
+    }
+
+    function updateColorGroup(oldHex, newHex) {
+      const target = oldHex.toLowerCase();
+      const cleanNew = newHex.toLowerCase();
+      const rgb = [
+        parseInt(cleanNew.slice(1, 3), 16),
+        parseInt(cleanNew.slice(3, 5), 16),
+        parseInt(cleanNew.slice(5, 7), 16)
+      ];
+      projectData.layers.forEach(layer => {
+        if (layer.hex.toLowerCase() === target) {
+          layer.hex = cleanNew;
+          layer.rgb = rgb;
+          layer.brother_name = 'Manual Color';
+          layer.brother_code = cleanNew.toUpperCase();
+        }
+      });
+      renderStudio();
+    }
+
+    async function downloadPES() {
+      if (!projectData) return alert('Please upload a PNG first!');
+      const activeLayers = projectData.layers.filter(l => !hiddenColors.has(l.hex.toLowerCase()));
+      if (!activeLayers.length) return alert('No active thread layers left to export!');
+
+      setStatus('Compiling Stitch-Optimized .PES file...');
+      const payload = {
+        width_px: projectData.width_px,
+        target_width_mm: Number(document.getElementById('hoop-size').value),
+        quality: document.getElementById('quality-select').value,
+        layers: activeLayers.map(l => ({
+          rgb: l.rgb,
+          brother_name: l.brother_name,
+          corners_px: l.corners_px,
+          holes_px: l.holes_px || [],
+          angle_deg: l.angle_deg,
+          stitch_type: l.stitch_type,
+          custom_chains_mm: l.is_custom_drawn ? l.chains_mm : null
+        }))
+      };
+      const res = await fetch('/api/compile-pes', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'fabrisketch_design.pes';
+      a.click();
+      setStatus(`Downloaded fabrisketch_design.pes (${activeLayers.length} stitched regions)!`);
+    }
+  </script>
+</body>
+</html>
