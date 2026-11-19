@@ -1,0 +1,38 @@
+# Python & Virtual Environment
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Environment Variables & Secrets (CRITICAL: Never commit your API keys!)
+.env
+.env.*
+*.key
+*.token
+
+# Datasets & Intermediate ML Data
+dataset/
+embroidery_dataset/
+procedural_embroidery_dataset/
+raw_pes_files/
+*.pt
+*.onnx
+
+# Output & Generated Artifacts
+*.pes
+*.dst
+*.exp
+*.jef
+1_*.png
+2_*.png
+3_*.png
+4_*.pes
+
+# Editor & OS Artifacts
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
